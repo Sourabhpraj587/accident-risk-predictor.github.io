@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accident Risk Predictor</title>
+<style>
+:root{--bg:#f3f5f7;--card:#fff;--ink:#1b2430;--mute:#5d6b7a;--line:#d9dfe5;--low:#2e8b57;--high:#c8372d;--acc:#1f4e79}
+@media (prefers-color-scheme:dark){:root{--bg:#10151b;--card:#18202a;--ink:#e8edf2;--mute:#9aa8b6;--line:#2b3744;--low:#4cc38a;--high:#ff6b5f;--acc:#7db4e6}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif;line-height:1.5}
+main{max-width:560px;margin:0 auto;padding:32px 18px 48px}
+h1{font-size:1.7rem;margin:0 0 6px}
+p.sub{color:var(--mute);margin:0 0 24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:22px}
+label{display:block;font-weight:600;margin:16px 0 6px}
+label:first-child{margin-top:0}
+input[type=range]{width:100%;accent-color:var(--acc)}
+select{width:100%;padding:10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:1rem}
+.val{color:var(--acc);font-weight:700}
+button{margin-top:22px;width:100%;padding:12px;border:0;border-radius:6px;background:var(--acc);color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+#out{margin-top:22px;display:none}
+.bar{height:14px;background:var(--line);border-radius:7px;overflow:hidden}
+.bar>div{height:100%;width:0;transition:width .5s}
+.res{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.big{font-size:2rem;font-weight:700}
+.note{color:var(--mute);font-size:.85rem;margin-top:22px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Accident risk predictor</h1>
+  <p class="sub">Enter the driving conditions to see the chance of a serious or fatal accident.</p>
+  <div class="card">
+    <label for="age">Driver age: <span class="val" id="ageV">35</span></label>
+    <input type="range" id="age" min="17" max="85" value="35">
+    <label for="weather">Weather</label>
+    <select id="weather">
+      <option value="0">Fine</option><option value="1">Rain</option><option value="2">Snow</option>
+      <option value="3">Fog</option><option value="4">High winds</option>
+    </select>
+    <label for="speed">Speed limit</label>
+    <select id="speed">
+      <option>20</option><option selected>30</option><option>40</option>
+      <option>50</option><option>60</option><option>70</option>
+    </select>
+    <button id="go" disabled>Loading model…</button>
+    <div id="out" aria-live="polite">
+      <div class="res"><span class="big" id="pct"></span><strong id="lbl"></strong></div>
+      <div class="bar"><div id="fill"></div></div>
+    </div>
+  </div>
+  <p class="note" id="note">Random Forest model trained in Python and run in your browser.</p>
+</main>
+<script>
+let forest=null;
+const $=id=>document.getElementById(id);
+$("age").addEventListener("input",e=>$("ageV").textContent=e.target.value);
+
+function treeProb(t,x){
+  let n=0;
+  while(t.f[n]!==-2){ n = x[t.f[n]]<=t.t[n] ? t.l[n] : t.r[n]; }
+  return t.p[n];
+}
+function predict(x){
+  return forest.trees.reduce((s,t)=>s+treeProb(t,x),0)/forest.trees.length;
+}
+
+Promise.all([fetch("model.json").then(r=>r.json()),
+             fetch("metrics.json").then(r=>r.json()).catch(()=>null)])
+.then(([m,met])=>{
+  forest=m; $("go").disabled=false; $("go").textContent="Predict risk";
+  if(met) $("note").textContent=`Random Forest trained on ${met.rows.toLocaleString()} records, test accuracy ${(met.accuracy*100).toFixed(1)}%. Runs in your browser.`;
+}).catch(()=>{ $("go").textContent="Model failed to load";
+  $("note").textContent="Could not load model.json. Open the site through GitHub Pages or a local server, not by double-clicking the file."; });
+
+$("go").addEventListener("click",()=>{
+  const p=predict([+$("age").value,+$("weather").value,+$("speed").value]);
+  const high=p>=0.5;
+  $("out").style.display="block";
+  $("pct").textContent=Math.round(p*100)+"%";
+  $("pct").style.color=high?"var(--high)":"var(--low)";
+  $("lbl").textContent=high?"High risk":"Low risk";
+  $("fill").style.background=high?"var(--high)":"var(--low)";
+  $("fill").style.width=Math.round(p*100)+"%";
+});
+</script>
+</body>
+</html>
